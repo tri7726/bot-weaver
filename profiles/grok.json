@@ -1,0 +1,6 @@
+{
+    "name": "Grok",
+    "model": "grok-3-mini-latest",
+    "api": "xai",
+    "embedding": "xai"
+}
