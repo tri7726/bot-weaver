@@ -661,6 +661,7 @@ export class Agent {
                 await this.update(start - last);
                 await this.team_manager.updateStatus(); // Sync HP/Role every cycle
                 if (Math.random() < 0.05) await this.team_manager.checkSupplies(); // Probabilistic supply check (~every 10s)
+                if (Math.random() < 0.01) await this.history.memory_bank.sync(); // Sync squad memory (~every 50s)
                 let remaining = INTERVAL - (Date.now() - start);
                 if (remaining > 0) {
                     await new Promise((resolve) => setTimeout(resolve, remaining));

@@ -294,6 +294,60 @@ const modes_list = [
         }
     },
     {
+        name: 'auto_resource_gathering',
+        description: 'Gatherers autonomously collect nearby wood and ores for the depot.',
+        interrupts: ['action:followPlayer', 'hunting'],
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const inventory = agent.bot.inventory.items().length;
+            const depot = agent.team_manager.depotLocation;
+            if (!depot) return;
+
+            // If inventory is full, go deposit
+            if (inventory > 32) {
+                say(agent, "Inventory full. Returning to Depot to stock up.");
+                execute(this, agent, async () => {
+                    await skills.depositAllToChest(agent.bot, depot.x, depot.y, depot.z);
+                });
+                return;
+            }
+
+            // Only Gatherers do this autonomously
+            const botInfo = (await agent.team_manager.getTeammates()).find(b => b.id === agent.bot_id);
+            if (botInfo?.combat_role !== 'GATHERER' && botInfo?.combat_role !== 'DPS') return;
+
+            const targets = ['oak_log', 'birch_log', 'coal_ore', 'iron_ore'];
+            for (const target of targets) {
+                const block = world.getNearestBlock(agent.bot, target, 30);
+                if (block) {
+                    say(agent, `Found ${target}. Harvesting for the squad.`);
+                    execute(this, agent, async () => {
+                        await skills.collectBlock(agent.bot, target, 8);
+                    });
+                    return;
+                }
+            }
+        }
+    },
+    {
+        name: 'stealth_formation',
+        description: 'Squad moves silently when enemies are near.',
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const target = await agent.team_manager.getActiveFocusTarget();
+            if (target) {
+                const entity = agent.bot.nearestEntity(e => e.name === target.entityName);
+                if (entity && agent.bot.entity.position.distanceTo(entity.position) < 32) {
+                    agent.bot.setControlState('sneak', true);
+                    return;
+                }
+            }
+            agent.bot.setControlState('sneak', false);
+        }
+    },
+    {
         name: 'hunting',
         description: 'Hunt nearby animals when idle.',
         interrupts: ['action:followPlayer'],

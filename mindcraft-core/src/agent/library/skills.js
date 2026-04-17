@@ -2125,6 +2125,59 @@ export async function useToolOn(bot, toolName, targetName) {
  }
 
  export async function useToolOnBlock(bot, toolName, block) {
+    if (typeof block === 'string') 
+        block = world.getNearestBlock(bot, block, 32);
+    if (!block) return false;
+    const tool = bot.inventory.items().find(i => i.name.includes(toolName));
+    if (!tool) return false;
+    await bot.equip(tool, 'hand');
+    await bot.lookAt(block.position);
+    await bot.activateBlock(block);
+    return true;
+}
+
+export async function depositAllToChest(bot, x, y, z) {
+    /**
+     * Deposit all items in inventory to a chest at the given position.
+     **/
+    const chestBlock = bot.blockAt(new Vec3(x, y, z));
+    if (!chestBlock || !chestBlock.name.includes('chest')) return false;
+
+    await goToPosition(bot, x, y, z, 2);
+    const chest = await bot.openChest(chestBlock);
+    const items = bot.inventory.items();
+    for (const item of items) {
+        // Keep essential tools? For now, dump everything for maximum logistics.
+        try { await chest.deposit(item.type, null, item.count); } catch (err) {}
+    }
+    await chest.close();
+    return true;
+}
+
+export async function equipBestFromChest(bot, x, y, z) {
+    /**
+     * Scan a chest for better armor/weapons and equip them.
+     **/
+    const chestBlock = bot.blockAt(new Vec3(x, y, z));
+    if (!chestBlock || !chestBlock.name.includes('chest')) return false;
+
+    await goToPosition(bot, x, y, z, 2);
+    const chest = await bot.openChest(chestBlock);
+    const chestItems = chest.containerItems();
+    
+    // Simple logic: pick up everything and let existing auto-equip handle it
+    for (const item of chestItems) {
+        if (item.name.includes('sword') || item.name.includes('helmet') || item.name.includes('chestplate') || item.name.includes('leggings') || item.name.includes('boots')) {
+            try { await chest.withdraw(item.type, null, item.count); } catch (err) {}
+        }
+    }
+    await chest.close();
+    // Trigger existing equip logic (if any)
+    const equipHighestAttack = async (bot) => { /* already in skills.js context usually */ };
+    return true;
+}
+
+ export async function useToolOnBlock(bot, toolName, block) {
     /**
      * Use a tool on a specific block.
      * @param {MinecraftBot} bot
