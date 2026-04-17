@@ -52,81 +52,6 @@ export type Database = {
           },
         ]
       }
-      agent_profiles: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          personality: string | null
-          system_prompt: string | null
-          model_config: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          personality?: string | null
-          system_prompt?: string | null
-          model_config?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          personality?: string | null
-          system_prompt?: string | null
-          model_config?: Json | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      agent_memories: {
-        Row: {
-          id: string
-          user_id: string
-          bot_id: string
-          content: string
-          layer: string
-          importance_score: number
-          metadata: Json | null
-          parent_id: string | null
-          server_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          bot_id: string
-          content: string
-          layer?: string
-          importance_score?: number
-          metadata?: Json | null
-          parent_id?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          bot_id?: string
-          content?: string
-          layer?: string
-          importance_score?: number
-          metadata?: Json | null
-          parent_id?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_memories_bot_id_fkey"
-            columns: ["bot_id"]
-            isOneToOne: false
-            referencedRelation: "bots"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
       bots: {
         Row: {
           auth_type: string
@@ -141,9 +66,6 @@ export type Database = {
           port: number
           status: string
           system_prompt: string | null
-          profile_id: string | null
-          minecraft_uuid: string | null
-          public_key: string | null
           updated_at: string
           use_global_keys: boolean
           user_id: string
@@ -161,9 +83,6 @@ export type Database = {
           port?: number
           status?: string
           system_prompt?: string | null
-          profile_id?: string | null
-          minecraft_uuid?: string | null
-          public_key?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id: string
@@ -181,22 +100,11 @@ export type Database = {
           port?: number
           status?: string
           system_prompt?: string | null
-          profile_id?: string | null
-          minecraft_uuid?: string | null
-          public_key?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id?: string
         }
-        Relationships: [
-            {
-                foreignKeyName: "bots_profile_id_fkey"
-                columns: ["profile_id"]
-                isOneToOne: false
-                referencedRelation: "agent_profiles"
-                referencedColumns: ["id"]
-            }
-        ]
+        Relationships: []
       }
       global_settings: {
         Row: {
@@ -255,10 +163,6 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
-          last_ping: string | null
-          metadata: Json | null
-          requirements: Json | null
-          server_ip: string | null
           status: string
           title: string
           updated_at: string
@@ -269,10 +173,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          last_ping?: string | null
-          metadata?: Json | null
-          requirements?: Json | null
-          server_ip?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -283,10 +183,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          last_ping?: string | null
-          metadata?: Json | null
-          requirements?: Json | null
-          server_ip?: string | null
           status?: string
           title?: string
           updated_at?: string
@@ -302,119 +198,12 @@ export type Database = {
           },
         ]
       }
-      admin_auth_sessions: {
-        Row: {
-          id: string
-          user_id: string
-          admin_name: string
-          admin_uuid: string | null
-          token_hash: string
-          nonce: string
-          is_used: boolean
-          expires_at: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          admin_name: string
-          admin_uuid?: string | null
-          token_hash: string
-          nonce: string
-          is_used?: boolean
-          expires_at?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          admin_name?: string
-          admin_uuid?: string | null
-          token_hash?: string
-          nonce?: string
-          is_used?: boolean
-          expires_at?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      agent_handshakes: {
-        Row: {
-          id: string
-          sender_id: string | null
-          receiver_id: string | null
-          challenge: string
-          signature: string | null
-          status: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          sender_id?: string | null
-          receiver_id?: string | null
-          challenge: string
-          signature?: string | null
-          status?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          sender_id?: string | null
-          receiver_id?: string | null
-          challenge?: string
-          signature?: string | null
-          status?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      coordination_locks: {
-        Row: {
-          id: string
-          goal_hash: string
-          server_ip: string
-          bot_id: string | null
-          expires_at: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          goal_hash: string
-          server_ip: string
-          bot_id?: string | null
-          expires_at: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          goal_hash?: string
-          server_ip?: string
-          bot_id?: string | null
-          expires_at?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      match_agent_memories: {
-        Args: {
-          query_embedding: string
-          match_threshold: number
-          match_count: number
-          p_user_id: string
-          p_bot_id: string
-        }
-        Returns: {
-          id: string
-          content: string
-          layer: string
-          similarity: number
-        }[]
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
