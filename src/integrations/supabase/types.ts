@@ -14,6 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_auth_sessions: {
+        Row: {
+          admin_name: string
+          created_at: string
+          expires_at: string
+          id: string
+          is_used: boolean
+          nonce: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          admin_name?: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          is_used?: boolean
+          nonce: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          admin_name?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          is_used?: boolean
+          nonce?: string
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      agent_memories: {
+        Row: {
+          bot_id: string | null
+          content: string
+          created_at: string
+          id: string
+          importance_score: number
+          layer: string
+          metadata: Json
+          server_id: string | null
+          user_id: string
+        }
+        Insert: {
+          bot_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          importance_score?: number
+          layer?: string
+          metadata?: Json
+          server_id?: string | null
+          user_id: string
+        }
+        Update: {
+          bot_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          importance_score?: number
+          layer?: string
+          metadata?: Json
+          server_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_memories_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          model_config: Json
+          name: string
+          personality: string | null
+          system_prompt: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model_config?: Json
+          name: string
+          personality?: string | null
+          system_prompt?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model_config?: Json
+          name?: string
+          personality?: string | null
+          system_prompt?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       bot_logs: {
         Row: {
           bot_id: string | null
@@ -60,10 +170,13 @@ export type Database = {
           host: string
           id: string
           minecraft_username: string
+          minecraft_uuid: string | null
           model_config: Json
           name: string
           personality: string | null
           port: number
+          profile_id: string | null
+          public_key: string | null
           status: string
           system_prompt: string | null
           updated_at: string
@@ -77,10 +190,13 @@ export type Database = {
           host?: string
           id?: string
           minecraft_username: string
+          minecraft_uuid?: string | null
           model_config?: Json
           name: string
           personality?: string | null
           port?: number
+          profile_id?: string | null
+          public_key?: string | null
           status?: string
           system_prompt?: string | null
           updated_at?: string
@@ -94,17 +210,28 @@ export type Database = {
           host?: string
           id?: string
           minecraft_username?: string
+          minecraft_uuid?: string | null
           model_config?: Json
           name?: string
           personality?: string | null
           port?: number
+          profile_id?: string | null
+          public_key?: string | null
           status?: string
           system_prompt?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bots_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "agent_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       global_settings: {
         Row: {
