@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as mindcraft from './mindcraft.js';
 import { readFileSync } from 'fs';
+import { testApiKey } from '../utils/apiTester.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Mindserver is:
@@ -47,8 +48,21 @@ export function logoutAgent(agentName) {
 // Initialize the server
 export function createMindServer(host_public = false, port = 8080) {
     const app = express();
+    
+    // Enable CORS for Express
+    app.use((req, res, next) => {
+        res.header("Access-Control-Allow-Origin", "*");
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        next();
+    });
+
     server = http.createServer(app);
-    io = new Server(server);
+    io = new Server(server, {
+        cors: {
+            origin: "*",
+            methods: ["GET", "POST"]
+        }
+    });
 
     // Serve static files
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -210,6 +224,12 @@ export function createMindServer(host_public = false, port = 8080) {
 
         socket.on('bot-output', (agentName, message) => {
             io.emit('bot-output', agentName, message);
+        });
+
+        socket.on('test-api-key', async (data, callback) => {
+            console.log(`Testing API key for provider: ${data.provider}`);
+            const result = await testApiKey(data.provider, data.apiKey);
+            callback(result);
         });
 
         socket.on('listen-to-agents', () => {

@@ -1,8 +1,7 @@
 import settings from '../settings.js';
-import prismarineViewer from 'prismarine-viewer';
-const mineflayerViewer = prismarineViewer.mineflayer;
 
 export function addBrowserViewer(bot, count_id) {
-    if (settings.render_bot_view)
-        mineflayerViewer(bot, { port: 3000+count_id, firstPerson: true, });
+    if (settings.render_bot_view) {
+        console.warn('Browser viewer is currently disabled because "prismarine-viewer" was removed to ensure a successful install on Windows.');
+    }
 }

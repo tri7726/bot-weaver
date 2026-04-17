@@ -17,9 +17,11 @@ import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
+import { initKeys } from '../utils/keys.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
+        await initKeys(settings.user_id);
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
@@ -39,10 +41,14 @@ export class Agent {
             return;
         }
         
+        this.user_id = settings.user_id;
+        this.bot_id = settings.bot_id;
+
         this.history = new History(this);
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
-        this.memory_bank = new MemoryBank();
+        this.memory_bank = new MemoryBank(this);
+        await this.memory_bank.sync();
         this.self_prompter = new SelfPrompter(this);
         convoManager.initAgent(this);
         await this.prompter.initExamples();
@@ -50,7 +56,7 @@ export class Agent {
         // load mem first before doing task
         let save_data = null;
         if (load_mem) {
-            save_data = this.history.load();
+            save_data = await this.history.load();
         }
         let taskStart = null;
         if (save_data) {
@@ -476,7 +482,7 @@ export class Agent {
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
                 console.log('Agent died: ', message);
                 let death_pos = this.bot.entity.position;
-                this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
+                await this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
                 let death_pos_text = null;
                 if (death_pos) {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;

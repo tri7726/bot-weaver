@@ -3,6 +3,10 @@ import settings from './settings.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { readFileSync } from 'fs';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 function parseArguments() {
     return yargs(hideBin(process.argv))
@@ -69,7 +73,12 @@ if (process.env.SETTINGS_JSON) {
         console.error("Failed to parse environment variable for SETTINGS_JSON:", err);
     }
 }
-
+if (process.env.SUPABASE_USER_ID) {
+    settings.user_id = process.env.SUPABASE_USER_ID;
+}
+if (process.env.SUPABASE_BOT_ID) {
+    settings.bot_id = process.env.SUPABASE_BOT_ID;
+}
 
 Mindcraft.init(false, settings.mindserver_port, settings.auto_open_ui);
 

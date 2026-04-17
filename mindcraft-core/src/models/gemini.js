@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { strictFormat } from '../utils/text.js';
-import { getKey } from '../utils/keys.js';
+import { getKey, rotateKey } from '../utils/keys.js';
 
 
 export class Gemini {
@@ -31,35 +31,51 @@ export class Gemini {
             },
         ];
 
+        this._initClient();
+    }
+
+    _initClient() {
         this.genAI = new GoogleGenAI({apiKey: getKey('GEMINI_API_KEY')});
     }
 
     async sendRequest(turns, systemMessage) {
         console.log('Awaiting Google API response...');
 
-        turns = strictFormat(turns);
-        let contents = [];
-        for (let turn of turns) {
-            contents.push({
-                role: turn.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: turn.content }]
-            });
-        }
-
-        const result = await this.genAI.models.generateContent({
-            model: this.model_name || "gemini-2.5-flash",
-            contents: contents,
-            safetySettings: this.safetySettings,
-            config: {
-                systemInstruction: systemMessage,
-                ...(this.params || {})
+        try {
+            turns = strictFormat(turns);
+            let contents = [];
+            for (let turn of turns) {
+                contents.push({
+                    role: turn.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: turn.content }]
+                });
             }
-        });
-        const response = await result.text;
 
-        console.log('Received.');
+            const result = await this.genAI.models.generateContent({
+                model: this.model_name || "gemini-2.5-flash",
+                contents: contents,
+                safetySettings: this.safetySettings,
+                config: {
+                    systemInstruction: systemMessage,
+                    ...(this.params || {})
+                }
+            });
+            const response = await result.text;
 
-        return response;
+            console.log('Received.');
+
+            return response;
+        } catch (err) {
+            // Rotation Logic
+            if (err.status === 401 || err.status === 429 || err.status >= 500) {
+                if (rotateKey('GEMINI_API_KEY')) {
+                    this._initClient();
+                    return await this.sendRequest(turns, systemMessage);
+                }
+            }
+            console.error(err);
+            return "My brain disconnected, try again.";
+        }
     }
 
     async sendVisionRequest(turns, systemMessage, imageBuffer) {

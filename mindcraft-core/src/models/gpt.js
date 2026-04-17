@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey, hasKey, rotateKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class GPT {
@@ -9,9 +9,13 @@ export class GPT {
         this.params = params;
         this.url = url; // store so that we know whether a custom URL has been set
 
+        this._initClient();
+    }
+
+    _initClient() {
         let config = {};
-        if (url)
-            config.baseURL = url;
+        if (this.url)
+            config.baseURL = this.url;
 
         if (hasKey('OPENAI_ORG_ID'))
             config.organization = getKey('OPENAI_ORG_ID');
@@ -22,19 +26,12 @@ export class GPT {
     }
 
     async sendRequest(turns, systemMessage, stop_seq='***') {
-        let messages = strictFormat(turns);
-        messages = messages.map(message => {
-            message.content += stop_seq;
-            return message;
-        });
         let model = this.model_name || "gpt-4o-mini";
-
         let res = null;
 
         try {
             console.log('Awaiting openai api response from model', model);
-            // if a custom URL is set, use chat.completions
-            // because custom "OpenAI-compatible" endpoints likely do not have responses endpoint
+            
             if (this.url) {
                 let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
                 messages = strictFormat(messages);
@@ -53,7 +50,6 @@ export class GPT {
                 console.log('Received.');
                 res = completion.choices[0].message.content;
             } 
-            // otherwise, use responses
             else {
                 let messages = strictFormat(turns);
                 messages = messages.map(message => {
@@ -73,14 +69,21 @@ export class GPT {
             }
         }
         catch (err) {
+            if (err.status === 401 || err.status === 429 || err.status >= 500) {
+                console.warn(`OpenAI API Error (${err.status}). Checking for fallback keys...`);
+                if (rotateKey('OPENAI_API_KEY')) {
+                    this._initClient();
+                    return await this.sendRequest(turns, systemMessage, stop_seq);
+                }
+            }
+
             if ((err.message == 'Context length exceeded' || err.code == 'context_length_exceeded') && turns.length > 1) {
                 console.log('Context length exceeded, trying again with shorter context.');
                 return await this.sendRequest(turns.slice(1), systemMessage, stop_seq);
-            } else if (err.message.includes('image_url')) {
-                console.log(err);
+            } else if (err.message && err.message.includes('image_url')) {
                 res = 'Vision is only supported by certain models.';
             } else {
-                console.log(err);
+                console.error(err);
                 res = 'My brain disconnected, try again.';
             }
         }
@@ -106,12 +109,23 @@ export class GPT {
     async embed(text) {
         if (text.length > 8191)
             text = text.slice(0, 8191);
-        const embedding = await this.openai.embeddings.create({
-            model: this.model_name || "text-embedding-3-small",
-            input: text,
-            encoding_format: "float",
-        });
-        return embedding.data[0].embedding;
+        
+        try {
+            const embedding = await this.openai.embeddings.create({
+                model: this.model_name || "text-embedding-3-small",
+                input: text,
+                encoding_format: "float",
+            });
+            return embedding.data[0].embedding;
+        } catch (err) {
+            if (err.status === 401 || err.status === 429 || err.status >= 500) {
+                if (rotateKey('OPENAI_API_KEY')) {
+                    this._initClient();
+                    return await this.embed(text);
+                }
+            }
+            throw err;
+        }
     }
 
 }

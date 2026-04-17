@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey } from '../utils/keys.js';
+import { getKey, rotateKey } from '../utils/keys.js';
 
 // xAI doesn't supply a SDK for their models, but fully supports OpenAI and Anthropic SDKs
 export class Grok {
@@ -9,14 +9,17 @@ export class Grok {
         this.url = url;
         this.params = params;
 
+        this._initClient();
+    }
+
+    _initClient() {
         let config = {};
-        if (url)
-            config.baseURL = url;
+        if (this.url)
+            config.baseURL = this.url;
         else
             config.baseURL = "https://api.x.ai/v1"
 
         config.apiKey = getKey('XAI_API_KEY');
-
         this.openai = new OpenAIApi(config);
     }
 
@@ -32,7 +35,6 @@ export class Grok {
         let res = null;
         try {
             console.log('Awaiting xai api response...')
-            ///console.log('Messages:', messages);
             let completion = await this.openai.chat.completions.create(pack);
             if (completion.choices[0].finish_reason == 'length')
                 throw new Error('Context length exceeded'); 
@@ -40,19 +42,26 @@ export class Grok {
             res = completion.choices[0].message.content;
         }
         catch (err) {
+            // Rotation Logic
+            if (err.status === 401 || err.status === 429 || err.status >= 500) {
+                console.warn(`Grok API Error (${err.status}). Checking for fallback keys...`);
+                if (rotateKey('XAI_API_KEY')) {
+                    this._initClient(); // Re-init with new key
+                    return await this.sendRequest(turns, systemMessage);
+                }
+            }
+
             if ((err.message == 'Context length exceeded' || err.code == 'context_length_exceeded') && turns.length > 1) {
                 console.log('Context length exceeded, trying again with shorter context.');
                 return await this.sendRequest(turns.slice(1), systemMessage);
-            } else if (err.message.includes('The model expects a single `text` element per message.')) {
-                console.log(err);
+            } else if (err.message && err.message.includes('single `text` element')) {
                 res = 'Vision is only supported by certain models.';
             } else {
-                console.log(err);
+                console.error(err);
                 res = 'My brain disconnected, try again.';
             }
         }
-        // sometimes outputs special token <|separator|>, just replace it
-        return res.replace(/<\|separator\|>/g, '*no response*');
+        return res ? res.replace(/<\|separator\|>/g, '*no response*') : '*no response*';
     }
 
     async sendVisionRequest(messages, systemMessage, imageBuffer) {
@@ -74,7 +83,17 @@ export class Grok {
     }
     
     async embed(text) {
-        throw new Error('Embeddings are not supported by Grok.');
+        try {
+            const response = await this.openai.embeddings.create({
+                model: "grok-embedding-v1", 
+                input: text,
+            });
+            return response.data[0].embedding;
+        } catch (err) {
+            console.error("Grok embedding error:", err);
+            // Fallback or throw
+            throw err;
+        }
     }
 }
 

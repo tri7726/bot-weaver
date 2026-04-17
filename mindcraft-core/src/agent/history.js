@@ -1,5 +1,5 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
-import { NPCData } from './npc/data.js';
+import { supabase } from '../utils/supabase.js';
 import settings from './settings.js';
 
 
@@ -22,8 +22,6 @@ export class History {
 
         // Number of messages to remove from current history and save into memory
         this.summary_chunk_size = 5; 
-        // chunking reduces expensive calls to promptMemSaving and appendFullHistory
-        // and improves the quality of the memory summary
     }
 
     getHistory() { // expects an Examples object
@@ -40,6 +38,25 @@ export class History {
         }
 
         console.log("Memory updated to: ", this.memory);
+
+        // Store as vector memory in Supabase
+        if (this.agent.user_id && this.agent.bot_id) {
+            try {
+                const embedding = await this.agent.prompter.embedding_model.embed(this.memory);
+                const { error } = await supabase
+                    .from('agent_memories')
+                    .insert({
+                        user_id: this.agent.user_id,
+                        bot_id: this.agent.bot_id,
+                        content: this.memory,
+                        embedding,
+                        metadata: { type: 'summary', turns: turns.length }
+                    });
+                if (error) throw error;
+            } catch (err) {
+                console.error('Failed to store vector memory:', err);
+            }
+        }
     }
 
     async appendFullHistory(to_store) {
@@ -89,25 +106,61 @@ export class History {
                 taskStart: this.agent.task.taskStartTime,
                 last_sender: this.agent.last_sender
             };
+            
+            // Local file fallback
             writeFileSync(this.memory_fp, JSON.stringify(data, null, 2));
-            console.log('Saved memory to:', this.memory_fp);
+            
+            // Supabase persistence
+            if (this.agent.user_id && this.agent.bot_id) {
+                const { error } = await supabase
+                    .from('agent_sessions')
+                    .upsert({
+                        user_id: this.agent.user_id,
+                        bot_id: this.agent.bot_id,
+                        session_data: data,
+                        updated_at: new Date()
+                    }, { onConflict: 'user_id, bot_id' });
+                if (error) throw error;
+            }
+
+            console.log('Saved memory to local and Supabase');
         } catch (error) {
             console.error('Failed to save history:', error);
             throw error;
         }
     }
 
-    load() {
+    async load() {
         try {
-            if (!existsSync(this.memory_fp)) {
-                console.log('No memory file found.');
-                return null;
+            let data = null;
+            
+            // Try Supabase first
+            if (this.agent.user_id && this.agent.bot_id) {
+                const { data: dbData, error } = await supabase
+                    .from('agent_sessions')
+                    .select('session_data')
+                    .eq('bot_id', this.agent.bot_id)
+                    .single();
+                if (!error && dbData) {
+                    data = dbData.session_data;
+                    console.log('Loaded memory from Supabase');
+                }
             }
-            const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
-            this.memory = data.memory || '';
-            this.turns = data.turns || [];
-            console.log('Loaded memory:', this.memory);
-            return data;
+
+            // Fallback to local file
+            if (!data && existsSync(this.memory_fp)) {
+                data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
+                console.log('Loaded memory from local file');
+            }
+
+            if (data) {
+                this.memory = data.memory || '';
+                this.turns = data.turns || [];
+                return data;
+            }
+            
+            console.log('No memory found.');
+            return null;
         } catch (error) {
             console.error('Failed to load history:', error);
             throw error;
@@ -118,4 +171,4 @@ export class History {
         this.turns = [];
         this.memory = '';
     }
-}
+}

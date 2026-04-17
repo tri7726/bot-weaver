@@ -1,16 +1,21 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { strictFormat } from '../utils/text.js';
-import { getKey } from '../utils/keys.js';
+import { getKey, rotateKey } from '../utils/keys.js';
 
 export class Claude {
     static prefix = 'anthropic';
     constructor(model_name, url, params) {
         this.model_name = model_name;
+        this.url = url;
         this.params = params || {};
 
+        this._initClient();
+    }
+
+    _initClient() {
         let config = {};
-        if (url)
-            config.baseURL = url;
+        if (this.url)
+            config.baseURL = this.url;
         
         config.apiKey = getKey('ANTHROPIC_API_KEY');
 
@@ -25,7 +30,6 @@ export class Claude {
             if (!this.params.max_tokens) {
                 if (this.params.thinking?.budget_tokens) {
                     this.params.max_tokens = this.params.thinking.budget_tokens + 1000;
-                    // max_tokens must be greater than thinking.budget_tokens
                 } else {
                     this.params.max_tokens = 4096;
                 }
@@ -38,7 +42,6 @@ export class Claude {
             });
 
             console.log('Received.')
-            // get first content of type text
             const textContent = resp.content.find(content => content.type === 'text');
             if (textContent) {
                 res = textContent.text;
@@ -48,12 +51,20 @@ export class Claude {
             }
         }
         catch (err) {
-            if (err.message.includes("does not support image input")) {
+            // Rotation Logic
+            if (err.status === 401 || err.status === 429 || err.status >= 500) {
+                if (rotateKey('ANTHROPIC_API_KEY')) {
+                    this._initClient();
+                    return await this.sendRequest(turns, systemMessage);
+                }
+            }
+
+            if (err.message && err.message.includes("does not support image input")) {
                 res = "Vision is only supported by certain models.";
             } else {
+                console.error(err);
                 res = "My brain disconnected, try again.";
             }
-            console.log(err);
         }
         return res;
     }
