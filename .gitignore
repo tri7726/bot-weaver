@@ -25,6 +25,7 @@ dist-ssr
 # Mindcraft
 mindcraft-core/node_modules
 mindcraft-core/.env
+mindcraft-core/keys.json
 mindcraft-core/logs
 mindcraft-core/*.log
 mindcraft-core/memories

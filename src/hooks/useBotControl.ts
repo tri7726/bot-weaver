@@ -65,5 +65,17 @@ export const useBotControl = () => {
     });
   }, [socket]);
 
-  return { agents, logs, isConnected, startAgent, stopAgent, createAgent, testApiKey };
+  const launchBot = useCallback((botId: string) => {
+    return new Promise((resolve) => {
+      socket?.emit('launch-bot', botId, (res: any) => resolve(res));
+    });
+  }, [socket]);
+
+  const triggerReflection = useCallback((agentName: string) => {
+    return new Promise((resolve) => {
+      socket?.emit('trigger-reflection', agentName, (res: any) => resolve(res));
+    });
+  }, [socket]);
+
+  return { agents, logs, isConnected, startAgent, stopAgent, createAgent, testApiKey, launchBot, triggerReflection };
 };
