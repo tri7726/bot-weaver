@@ -14,7 +14,190 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bot_logs: {
+        Row: {
+          bot_id: string | null
+          created_at: string
+          id: string
+          level: string
+          message: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          bot_id?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          bot_id?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_logs_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bots: {
+        Row: {
+          auth_type: string
+          created_at: string
+          custom_api_keys: Json
+          host: string
+          id: string
+          minecraft_username: string
+          model_config: Json
+          name: string
+          personality: string | null
+          port: number
+          status: string
+          system_prompt: string | null
+          updated_at: string
+          use_global_keys: boolean
+          user_id: string
+        }
+        Insert: {
+          auth_type?: string
+          created_at?: string
+          custom_api_keys?: Json
+          host?: string
+          id?: string
+          minecraft_username: string
+          model_config?: Json
+          name: string
+          personality?: string | null
+          port?: number
+          status?: string
+          system_prompt?: string | null
+          updated_at?: string
+          use_global_keys?: boolean
+          user_id: string
+        }
+        Update: {
+          auth_type?: string
+          created_at?: string
+          custom_api_keys?: Json
+          host?: string
+          id?: string
+          minecraft_username?: string
+          model_config?: Json
+          name?: string
+          personality?: string | null
+          port?: number
+          status?: string
+          system_prompt?: string | null
+          updated_at?: string
+          use_global_keys?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      global_settings: {
+        Row: {
+          api_keys: Json
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_keys?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_keys?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          bot_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bot_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bot_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
