@@ -31,6 +31,7 @@ type FormState = {
   host: string;
   port: number;
   auth_type: "microsoft" | "offline";
+  profile_id: string | null;
   system_prompt: string;
   personality: string;
   model_config: { provider: string; model: string; temperature: number };
@@ -40,7 +41,8 @@ type FormState = {
 
 const empty: FormState = {
   name: "", minecraft_username: "", host: "localhost", port: 25565, auth_type: "offline",
-  system_prompt: "You are a helpful Minecraft bot.", personality: "",
+  profile_id: null,
+  system_prompt: "", personality: "",
   model_config: { provider: "openai", model: "gpt-4o-mini", temperature: 0.7 },
   custom_api_keys: {}, use_global_keys: true,
 };
@@ -51,13 +53,18 @@ export default function BotEdit() {
   const nav = useNavigate();
   const { user } = useAuth();
   const [form, setForm] = useState<FormState>(empty);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     document.title = `${isNew ? "New bot" : "Edit bot"} · Mindcraft Manager`;
-    if (!isNew && id) {
-      (async () => {
+    (async () => {
+      // Load Profiles for selection
+      const { data: profs } = await supabase.from("agent_profiles").select("id, name");
+      setProfiles(profs ?? []);
+
+      if (!isNew && id) {
         const { data, error } = await supabase.from("bots").select("*").eq("id", id).maybeSingle();
         if (error) toast.error(error.message);
         else if (data) {
@@ -67,6 +74,7 @@ export default function BotEdit() {
             host: data.host,
             port: data.port,
             auth_type: data.auth_type as any,
+            profile_id: data.profile_id,
             system_prompt: data.system_prompt ?? "",
             personality: data.personality ?? "",
             model_config: { ...empty.model_config, ...(data.model_config as any) },
@@ -74,9 +82,9 @@ export default function BotEdit() {
             use_global_keys: data.use_global_keys,
           });
         }
-        setLoading(false);
-      })();
-    }
+      }
+      setLoading(false);
+    })();
   }, [id, isNew]);
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -87,8 +95,8 @@ export default function BotEdit() {
     setBusy(true);
     const payload = { ...form, user_id: user.id };
     const res = isNew
-      ? await supabase.from("bots").insert(payload).select().single()
-      : await supabase.from("bots").update(payload).eq("id", id!).select().single();
+      ? await supabase.from("bots").insert(payload as any).select().single()
+      : await supabase.from("bots").update(payload as any).eq("id", id!).select().single();
     setBusy(false);
     if (res.error) toast.error(res.error.message);
     else { toast.success(isNew ? "Bot created" : "Saved"); nav("/bots"); }
@@ -127,14 +135,27 @@ export default function BotEdit() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Personality</CardTitle><CardDescription>How the bot thinks and behaves</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Personality & Profile</CardTitle><CardDescription>Select a base template or override settings</CardDescription></CardHeader>
           <CardContent className="space-y-4">
-            <Field label="System prompt">
-              <Textarea rows={6} value={form.system_prompt} onChange={(e) => update("system_prompt", e.target.value)} />
+            <Field label="Base Profile">
+              <Select value={form.profile_id ?? "none"} onValueChange={(v) => update("profile_id", v === "none" ? null : v)}>
+                <SelectTrigger><SelectValue placeholder="Select a profile template" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Profile (Use Overrides Only)</SelectItem>
+                  {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="Personality description">
-              <Textarea rows={3} value={form.personality} onChange={(e) => update("personality", e.target.value)} placeholder="Curious explorer, builder, friendly helper…" />
-            </Field>
+            
+            <div className="pt-2 border-t">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Overrides</div>
+                <Field label="Custom System Prompt (Optional)">
+                    <Textarea rows={4} value={form.system_prompt} onChange={(e) => update("system_prompt", e.target.value)} placeholder="If empty, uses base profile prompt..." />
+                </Field>
+                <Field label="Custom Personality Description (Optional)">
+                    <Textarea rows={2} value={form.personality} onChange={(e) => update("personality", e.target.value)} placeholder="If empty, uses base profile description..." />
+                </Field>
+            </div>
           </CardContent>
         </Card>
 

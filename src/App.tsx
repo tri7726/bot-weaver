@@ -10,9 +10,12 @@ import Dashboard from "./pages/Dashboard";
 import Bots from "./pages/Bots";
 import BotEdit from "./pages/BotEdit";
 import Tasks from "./pages/Tasks";
-import Settings from "./pages/Settings";
-import Logs from "./pages/Logs";
-import NotFound from "./pages/NotFound.tsx";
+import Settings from "@/pages/Settings";
+import Profiles from "@/pages/Profiles";
+import ProfileEdit from "@/pages/ProfileEdit";
+import Memories from "@/pages/Memories";
+import Logs from "@/pages/Logs";
+import NotFound from "@/pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +37,9 @@ const App = () => {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/bots" element={<Bots />} />
                 <Route path="/bots/:id" element={<BotEdit />} />
+                <Route path="/profiles" element={<Profiles />} />
+                <Route path="/profiles/:id" element={<ProfileEdit />} />
+                <Route path="/memories" element={<Memories />} />
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/logs" element={<Logs />} />

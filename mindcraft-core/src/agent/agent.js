@@ -21,7 +21,7 @@ import { initKeys } from '../utils/keys.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
-        await initKeys(settings.user_id);
+        await initKeys(settings.user_id, settings.custom_api_keys);
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;

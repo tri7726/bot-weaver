@@ -52,6 +52,80 @@ export type Database = {
           },
         ]
       }
+      agent_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          personality: string | null
+          system_prompt: string | null
+          model_config: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          personality?: string | null
+          system_prompt?: string | null
+          model_config?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          personality?: string | null
+          system_prompt?: string | null
+          model_config?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      agent_memories: {
+        Row: {
+          id: string
+          user_id: string
+          bot_id: string
+          content: string
+          layer: string
+          importance_score: number
+          metadata: Json | null
+          parent_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          bot_id: string
+          content: string
+          layer?: string
+          importance_score?: number
+          metadata?: Json | null
+          parent_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          bot_id?: string
+          content?: string
+          layer?: string
+          importance_score?: number
+          metadata?: Json | null
+          parent_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_memories_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       bots: {
         Row: {
           auth_type: string
@@ -66,6 +140,7 @@ export type Database = {
           port: number
           status: string
           system_prompt: string | null
+          profile_id: string | null
           updated_at: string
           use_global_keys: boolean
           user_id: string
@@ -83,6 +158,7 @@ export type Database = {
           port?: number
           status?: string
           system_prompt?: string | null
+          profile_id?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id: string
@@ -100,11 +176,20 @@ export type Database = {
           port?: number
           status?: string
           system_prompt?: string | null
+          profile_id?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+            {
+                foreignKeyName: "bots_profile_id_fkey"
+                columns: ["profile_id"]
+                isOneToOne: false
+                referencedRelation: "agent_profiles"
+                referencedColumns: ["id"]
+            }
+        ]
       }
       global_settings: {
         Row: {

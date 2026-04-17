@@ -113,6 +113,69 @@ export function createMindServer(host_public = false, port = 8080) {
             }
         });
 
+        socket.on('launch-bot', async (botId, callback) => {
+            try {
+                const { supabase } = await import('../utils/supabase.js');
+                
+                // 1. Fetch Bot Config
+                const { data: bot, error: botErr } = await supabase.from('bots').select('*').eq('id', botId).maybeSingle();
+                if (botErr || !bot) throw new Error(botErr?.message || 'Bot not found');
+
+                // 2. Fetch Profile if exists
+                let system_prompt = bot.system_prompt;
+                let personality = bot.personality;
+                if (bot.profile_id) {
+                    const { data: prof } = await supabase.from('agent_profiles').select('*').eq('id', bot.profile_id).maybeSingle();
+                    if (prof) {
+                        if (!system_prompt) system_prompt = prof.system_prompt;
+                        if (!personality) personality = prof.personality;
+                    }
+                }
+
+                // 3. Prepare Settings Object
+                const settings = {
+                    host: bot.host,
+                    port: bot.port,
+                    minecraft_username: bot.minecraft_username,
+                    auth: bot.auth_type,
+                    profile: {
+                        name: bot.name,
+                        systemPrompt: system_prompt,
+                        personality: personality,
+                        ...(bot.model_config || {})
+                    },
+                    load_memory: true,
+                    init_message: "Hello, I am back online.",
+                    user_id: bot.user_id,
+                    bot_id: bot.id,
+                    use_global_keys: bot.use_global_keys,
+                    custom_api_keys: bot.custom_api_keys
+                };
+
+                console.log(`Launching bot ${bot.name} from Supabase config...`);
+                
+                // 4. Update status in DB
+                await supabase.from('bots').update({ status: 'starting' }).eq('id', botId);
+                agentsStatusUpdate();
+
+                // 5. Create Agent
+                let res = await mindcraft.createAgent(settings);
+                
+                if (res.success) {
+                    await supabase.from('bots').update({ status: 'running' }).eq('id', botId);
+                    callback({ success: true });
+                } else {
+                    await supabase.from('bots').update({ status: 'error' }).eq('id', botId);
+                    callback({ success: false, error: res.error });
+                }
+                agentsStatusUpdate();
+
+            } catch (err) {
+                console.error('Launch Error:', err);
+                callback({ success: false, error: err.message });
+            }
+        });
+
         socket.on('get-settings', (agentName, callback) => {
             if (agent_connections[agentName]) {
                 callback({ settings: agent_connections[agentName].settings });
@@ -234,6 +297,17 @@ export function createMindServer(host_public = false, port = 8080) {
 
         socket.on('listen-to-agents', () => {
             addListener(socket);
+        });
+
+        socket.on('trigger-reflection', (agentName, callback) => {
+            if (agent_connections[agentName] && agent_connections[agentName].socket) {
+                console.log(`Triggering reflection for ${agentName}...`);
+                agent_connections[agentName].socket.emit('trigger-reflection', (res) => {
+                   if (callback) callback(res);
+                });
+            } else {
+                if (callback) callback({ success: false, error: 'Agent not online' });
+            }
         });
     });
 
