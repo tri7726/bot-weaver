@@ -21,4 +21,16 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+
+# Mindcraft
+mindcraft-core/node_modules
+mindcraft-core/.env
+mindcraft-core/logs
+mindcraft-core/*.log
+mindcraft-core/memories
+mindcraft-core/screenshots
+
+# Minecraft specific
+*.db
+memories/
+screenshots/
