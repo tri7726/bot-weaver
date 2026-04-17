@@ -15,6 +15,7 @@ import Profiles from "@/pages/Profiles";
 import ProfileEdit from "@/pages/ProfileEdit";
 import Memories from "@/pages/Memories";
 import Logs from "@/pages/Logs";
+import VisualMap from "./pages/VisualMap";
 import NotFound from "@/pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => {
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/logs" element={<Logs />} />
+                <Route path="/map" element={<VisualMap />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

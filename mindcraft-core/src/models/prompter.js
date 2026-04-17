@@ -163,8 +163,10 @@ export class Prompter {
         }
         if (prompt.includes('$EXAMPLES') && examples !== null)
             prompt = prompt.replaceAll('$EXAMPLES', await examples.createExampleMessage(messages));
-        if (prompt.includes('$MEMORY'))
-            prompt = prompt.replaceAll('$MEMORY', this.agent.history.memory);
+        if (prompt.includes('$MEMORY')) {
+            const context = await this.agent.history.getRelevantContext(messages[messages.length - 1]?.content || '');
+            prompt = prompt.replaceAll('$MEMORY', context || this.agent.history.memory);
+        }
         if (prompt.includes('$TO_SUMMARIZE'))
             prompt = prompt.replaceAll('$TO_SUMMARIZE', stringifyTurns(to_summarize));
         if (prompt.includes('$CONVO'))
@@ -192,6 +194,18 @@ export class Prompter {
                 }
                 prompt = prompt.replaceAll('$BLUEPRINTS', blueprints.slice(0, -2));
             }
+        }
+
+        if (prompt.includes('$TEAM_STATE')) {
+            const unassigned = await this.agent.team_manager.syncTeamBoard();
+            let team_text = '--- TEAM TASK BOARD ---\n';
+            if (unassigned.length > 0) {
+                team_text += 'AVAILABLE SUB-TASKS (UNASSIGNED):\n';
+                unassigned.forEach(t => team_text += `- [ ] ${t.title}: ${t.description}\n`);
+            } else {
+                team_text += 'No available sub-tasks in the pool.\n';
+            }
+            prompt = prompt.replaceAll('$TEAM_STATE', team_text);
         }
 
         // check if there are any remaining placeholders with syntax $<word>
@@ -278,7 +292,7 @@ export class Prompter {
 
     async promptMemSaving(to_summarize) {
         await this.checkCooldown();
-        let prompt = this.profile.saving_memory;
+        let prompt = this.profile.saving_memory || "Compress the following chat history into a single sentence memory.";
         prompt = await this.replaceStrings(prompt, null, null, to_summarize);
         let resp = await this.chat_model.sendRequest([], prompt);
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
@@ -287,6 +301,32 @@ export class Prompter {
             resp = afterThink;
         }
         return resp;
+    }
+
+    async promptFailureAnalysis(context, reason) {
+        await this.checkCooldown();
+        const failurePrompt = `
+        You are an expert Minecraft AI strategist. You just FAILED an objective or DIED.
+        REASON FOR FAILURE: "${reason}"
+        
+        RECENT CONTEXT:
+        $TO_SUMMARIZE
+        
+        TASK:
+        1. Identify the root cause of the failure.
+        2. Formulate a "Lesson Learned" - a rule for your future self to avoid this.
+        3. Be brief but specific (e.g. "Don't attack skeletons without a shield when low health", "Lava is at Y < 11, be careful mining down").
+        
+        OUTPUT: Only the "Lesson Learned" sentence.
+        `;
+        const prompt = await this.replaceStrings(failurePrompt, null, null, context);
+        let resp = await this.chat_model.sendRequest([], prompt);
+        
+        if (resp?.includes('</think>')) {
+            const [_, afterThink] = resp.split('</think>')
+            resp = afterThink;
+        }
+        return resp.trim();
     }
 
     async promptShouldRespondToBot(new_message) {

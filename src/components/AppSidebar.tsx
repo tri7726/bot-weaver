@@ -1,4 +1,4 @@
-import { Bot, LayoutDashboard, ListChecks, Settings, ScrollText, LogOut, Activity } from "lucide-react";
+import { Bot, LayoutDashboard, ListChecks, Settings, ScrollText, LogOut, Activity, Map as MapIcon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -15,6 +15,7 @@ const items = [
   { title: "Tasks", url: "/tasks", icon: ListChecks, end: false },
   { title: "Logs", url: "/logs", icon: ScrollText, end: false },
   { title: "Global Settings", url: "/settings", icon: Settings, end: false },
+  { title: "Visual Map", url: "/map", icon: MapIcon, end: false },
 ];
 
 import { useBotControl } from "@/hooks/useBotControl";

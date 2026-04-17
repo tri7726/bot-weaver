@@ -92,6 +92,7 @@ export type Database = {
           importance_score: number
           metadata: Json | null
           parent_id: string | null
+          server_id: string | null
           created_at: string
         }
         Insert: {
@@ -141,6 +142,8 @@ export type Database = {
           status: string
           system_prompt: string | null
           profile_id: string | null
+          minecraft_uuid: string | null
+          public_key: string | null
           updated_at: string
           use_global_keys: boolean
           user_id: string
@@ -159,6 +162,8 @@ export type Database = {
           status?: string
           system_prompt?: string | null
           profile_id?: string | null
+          minecraft_uuid?: string | null
+          public_key?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id: string
@@ -177,6 +182,8 @@ export type Database = {
           status?: string
           system_prompt?: string | null
           profile_id?: string | null
+          minecraft_uuid?: string | null
+          public_key?: string | null
           updated_at?: string
           use_global_keys?: boolean
           user_id?: string
@@ -248,6 +255,10 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          last_ping: string | null
+          metadata: Json | null
+          requirements: Json | null
+          server_ip: string | null
           status: string
           title: string
           updated_at: string
@@ -258,6 +269,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          last_ping?: string | null
+          metadata?: Json | null
+          requirements?: Json | null
+          server_ip?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -268,6 +283,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          last_ping?: string | null
+          metadata?: Json | null
+          requirements?: Json | null
+          server_ip?: string | null
           status?: string
           title?: string
           updated_at?: string
@@ -283,12 +302,119 @@ export type Database = {
           },
         ]
       }
+      admin_auth_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          admin_name: string
+          admin_uuid: string | null
+          token_hash: string
+          nonce: string
+          is_used: boolean
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          admin_name: string
+          admin_uuid?: string | null
+          token_hash: string
+          nonce: string
+          is_used?: boolean
+          expires_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          admin_name?: string
+          admin_uuid?: string | null
+          token_hash?: string
+          nonce?: string
+          is_used?: boolean
+          expires_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      agent_handshakes: {
+        Row: {
+          id: string
+          sender_id: string | null
+          receiver_id: string | null
+          challenge: string
+          signature: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          sender_id?: string | null
+          receiver_id?: string | null
+          challenge: string
+          signature?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          sender_id?: string | null
+          receiver_id?: string | null
+          challenge?: string
+          signature?: string | null
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      coordination_locks: {
+        Row: {
+          id: string
+          goal_hash: string
+          server_ip: string
+          bot_id: string | null
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          goal_hash: string
+          server_ip: string
+          bot_id?: string | null
+          expires_at: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          goal_hash?: string
+          server_ip?: string
+          bot_id?: string | null
+          expires_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_agent_memories: {
+        Args: {
+          query_embedding: string
+          match_threshold: number
+          match_count: number
+          p_user_id: string
+          p_bot_id: string
+        }
+        Returns: {
+          id: string
+          content: string
+          layer: string
+          similarity: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

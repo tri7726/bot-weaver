@@ -167,7 +167,9 @@ export default function Memories() {
           <div className="absolute left-4 top-0 bottom-0 w-px bg-border md:left-[107px]" />
 
           {memories.map((m) => {
-            const isFailure = m.metadata?.type === 'failure' || m.content.toLowerCase().includes('dead') || m.content.toLowerCase().includes('died');
+            const metadata = m.metadata as any;
+            const isFailure = metadata?.status === 'failure' || metadata?.type === 'failure' || m.content.toLowerCase().includes('death') || m.content.toLowerCase().includes('died');
+            const isLesson = m.content.includes('[LESSON LEARNED]');
             
             return (
                 <div key={m.id} className="relative pl-10 md:pl-0 md:grid md:grid-cols-[100px_1fr] gap-8 group">
@@ -187,8 +189,14 @@ export default function Memories() {
                                     {getLayerIcon(m.layer)}
                                     {m.layer.replace('_', ' ')}
                                 </Badge>
+                                {(m as any).server_id && (
+                                    <Badge variant="outline" className="h-5 text-[10px] border-white/10 bg-white/5 text-muted-foreground">
+                                        Server: {(m as any).server_id}
+                                    </Badge>
+                                )}
                                 <Badge variant="secondary" className="h-5 text-[10px]">{m.bots?.name || 'Unknown Bot'}</Badge>
                                 {isFailure && <Badge variant="destructive" className="h-5 text-[10px] gap-1"><AlertTriangle className="h-3 w-3" /> Failure</Badge>}
+                                {isLesson && <Badge variant="secondary" className="h-5 text-[10px] bg-indigo-500/20 text-indigo-400 border-indigo-500/20 font-bold tracking-tight">🎓 Lesson Learned</Badge>}
                                 {m.importance_score > 0.7 && <Badge variant="secondary" className="h-5 text-[10px] bg-amber-500/20 text-amber-600 border-amber-500/20">Important</Badge>}
                             </div>
                             <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={() => remove(m.id)}>

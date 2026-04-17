@@ -28,35 +28,56 @@ export class History {
         return JSON.parse(JSON.stringify(this.turns));
     }
 
-    async summarizeMemories(turns) {
-        console.log("Storing memories...");
-        this.memory = await this.agent.prompter.promptMemSaving(turns);
-
-        if (this.memory.length > 500) {
-            this.memory = this.memory.slice(0, 500);
-            this.memory += '...(Memory truncated to 500 chars. Compress it more next time)';
+    async summarizeMemories(turns, layer = 'summary', parent_id = null, importance = 0.5, extraMetadata = {}) {
+        console.log(`Refining memories -> Layer: ${layer}...`);
+        
+        let content;
+        if (extraMetadata.directContent) {
+            content = extraMetadata.directContent;
+        } else {
+            content = await this.agent.prompter.promptMemSaving(turns);
         }
 
-        console.log("Memory updated to: ", this.memory);
+        let refinedContent = content;
+        if (refinedContent.length > 500) {
+            refinedContent = refinedContent.slice(0, 500);
+            refinedContent += '...(Memory truncated)';
+        }
+
+        console.log(`Memory updated (${layer}): `, refinedContent);
 
         // Store as vector memory in Supabase
         if (this.agent.user_id && this.agent.bot_id) {
             try {
-                const embedding = await this.agent.prompter.embedding_model.embed(this.memory);
-                const { error } = await supabase
+                const embedding = await this.agent.prompter.embedding_model.embed(refinedContent);
+                const { data, error } = await supabase
                     .from('agent_memories')
                     .insert({
                         user_id: this.agent.user_id,
                         bot_id: this.agent.bot_id,
-                        content: this.memory,
+                        content: refinedContent,
                         embedding,
-                        metadata: { type: 'summary', turns: turns.length }
-                    });
+                        layer: layer,
+                        importance_score: importance,
+                        server_id: this.server_id,
+                        parent_id: parent_id,
+                        metadata: { 
+                            turns: turns.length,
+                            timestamp: new Date().toISOString(),
+                            ...extraMetadata
+                        }
+                    })
+                    .select('id')
+                    .single();
+                
                 if (error) throw error;
+                this.memory = refinedContent; 
+                return data?.id;
             } catch (err) {
                 console.error('Failed to store vector memory:', err);
             }
         }
+        return null;
     }
 
     async appendFullHistory(to_store) {
@@ -167,8 +188,42 @@ export class History {
         }
     }
 
+    async getRelevantContext(query) {
+        if (!this.agent.user_id || !this.agent.bot_id) return '';
+        
+        try {
+            console.log(`Searching hierarchical memories for: "${query.substring(0, 50)}..."`);
+            const embedding = await this.agent.prompter.embedding_model.embed(query);
+            
+            // RPC call for vector similarity search (requires a custom Postgres function)
+            // Or use a standard select if supabase-js supports it with filters
+            // For now, we'll try a flexible filtering approach
+            
+            const { data, error } = await supabase.rpc('match_agent_memories', {
+                query_embedding: embedding,
+                match_threshold: 0.5,
+                match_count: 5,
+                p_user_id: this.agent.user_id,
+                p_bot_id: this.agent.bot_id
+            });
+
+            if (error) throw error;
+            if (!data || data.length === 0) return '';
+
+            let context = "\nRelevant memories from your past:\n";
+            data.forEach(m => {
+                const layerTag = m.layer === 'abstract' ? '[GLOBAL KNOWLEDGE]' : `[${m.layer.toUpperCase()}]`;
+                context += `- ${layerTag}: ${m.content}\n`;
+            });
+            return context;
+        } catch (err) {
+            console.error('Vector search failed:', err);
+            return '';
+        }
+    }
+
     clear() {
         this.turns = [];
         this.memory = '';
     }
-}
+}

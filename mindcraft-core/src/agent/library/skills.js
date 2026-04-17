@@ -3,6 +3,7 @@ import * as world from "./world.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
+import * as combat from "../../utils/combat_utils.js";
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
@@ -365,6 +366,88 @@ export async function attackEntity(bot, entity, kill=true) {
         await pickupNearbyItems(bot);
         return true;
     }
+}
+
+export async function attackEntityPro(bot, entity) {
+    /**
+     * Professional combat: Jump-crits, W-tap, and tactical strafing.
+     */
+    if (!entity) return false;
+    bot.modes.pause('item_collecting');
+    
+    let direction = Math.random() < 0.5 ? 1 : -1;
+    let lastStrafe = Date.now();
+
+    while (entity.health > 0 && !bot.interrupt_code) {
+        const dist = bot.entity.position.distanceTo(entity.position);
+        if (dist > 6) break;
+
+        // 1. Position/Movement: Tactical Strafe
+        if (Date.now() - lastStrafe > 800) {
+            const strafePos = combat.getStrafePosition(bot, entity, direction);
+            bot.pathfinder.setGoal(new pf.goals.GoalNear(strafePos.x, strafePos.y, strafePos.z, 0.5));
+            lastStrafe = Date.now();
+            if (Math.random() < 0.25) direction *= -1; 
+        }
+
+        // 2. Jump-Crit: Attack when falling
+        if (combat.shouldJumpCrit(bot, entity) && Math.random() < 0.7) {
+            bot.setControlState('jump', true);
+            setTimeout(() => { if(!bot.interrupt_code) bot.setControlState('jump', false); }, 50);
+        }
+
+        const isFalling = bot.entity.velocity.y < -0.05;
+        if (dist < 4 && (!bot.entity.onGround || isFalling)) {
+            await equipHighestAttack(bot);
+            bot.attack(entity);
+            combat.applyWTap(bot);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    bot.pathfinder.stop();
+    return true;
+}
+
+export async function attackEntityPro(bot, entity) {
+    /**
+     * Professional combat: Jump-crits, W-tap, and tactical strafing.
+     */
+    if (!entity) return false;
+    bot.modes.pause('item_collecting');
+    
+    let direction = Math.random() < 0.5 ? 1 : -1;
+    let lastStrafe = Date.now();
+
+    while (entity.health > 0 && !bot.interrupt_code) {
+        const dist = bot.entity.position.distanceTo(entity.position);
+        if (dist > 6) break;
+
+        // 1. Position/Movement: Tactical Strafe
+        if (Date.now() - lastStrafe > 800) {
+            const strafePos = combat.getStrafePosition(bot, entity, direction);
+            bot.pathfinder.setGoal(new pf.goals.GoalNear(strafePos.x, strafePos.y, strafePos.z, 0.5));
+            lastStrafe = Date.now();
+            if (Math.random() < 0.25) direction *= -1; 
+        }
+
+        // 2. Jump-Crit: Attack when falling
+        if (combat.shouldJumpCrit(bot, entity) && Math.random() < 0.7) {
+            bot.setControlState('jump', true);
+            setTimeout(() => { if(!bot.interrupt_code) bot.setControlState('jump', false); }, 50);
+        }
+
+        const isFalling = bot.entity.velocity.y < -0.05;
+        if (dist < 4 && (!bot.entity.onGround || isFalling)) {
+            await equipHighestAttack(bot);
+            bot.attack(entity);
+            combat.applyWTap(bot);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    bot.pathfinder.stop();
+    return true;
 }
 
 export async function defendSelf(bot, range=9) {
@@ -1464,7 +1547,7 @@ export async function avoidEnemies(bot, distance=16) {
             break;
         }
         if (enemy && bot.entity.position.distanceTo(enemy.position) < 3) {
-            await attackEntity(bot, enemy, false);
+            await attackEntityPro(bot, enemy, false);
         }
     }
     bot.pathfinder.stop();

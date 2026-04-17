@@ -3,6 +3,8 @@ import * as world from './library/world.js';
 import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
+import * as combat from '../utils/combat_utils.js';
+import Vec3 from 'vec3';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
@@ -79,6 +81,16 @@ const modes_list = [
             else if (Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
+                    // Tactical Escape: Try Ender Pearl first
+                    const pearl = bot.inventory.findInventoryItem('ender_pearl');
+                    if (pearl) {
+                        say(agent, 'Tactical retreat! Throwing pearl...');
+                        const traj = combat.getEscapeTrajectory(bot);
+                        await bot.look(traj.yaw, traj.pitch, true);
+                        await bot.equip(pearl, 'hand');
+                        await bot.activateItem();
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
                     await skills.moveAway(bot, 20);
                 });
             }
@@ -160,12 +172,124 @@ const modes_list = [
         on: true,
         active: false,
         update: async function (agent) {
+            // Check for squad focus target first
+            const focusData = await agent.team_manager.getActiveFocusTarget();
+            if (focusData) {
+                const entity = agent.bot.entities[focusData.entityId] || 
+                               world.getNearestEntityWhere(agent.bot, e => e.name === focusData.entityName, 32);
+                if (entity && await world.isClearPath(agent.bot, entity)) {
+                    say(agent, `Focusing squad target: ${focusData.entityName}!`);
+                    execute(this, agent, async () => {
+                        await skills.attackEntityPro(agent.bot, entity);
+                    });
+                    return;
+                }
+            }
+
             const enemy = world.getNearestEntityWhere(agent.bot, entity => mc.isHostile(entity), 8);
             if (enemy && await world.isClearPath(agent.bot, enemy)) {
                 say(agent, `Fighting ${enemy.name}!`);
                 execute(this, agent, async () => {
                     await skills.defendSelf(agent.bot, 8);
                 });
+            }
+        }
+    },
+    {
+        name: 'combat_support',
+        description: 'Healers support low-health teammates with splash potions. Interrupts some actions.',
+        interrupts: ['action:followPlayer', 'item_collecting', 'hunting'],
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const inventory = agent.bot.inventory.items();
+            const splashPotion = inventory.find(i => i.name === 'splash_potion'); // Simple check, could be more specific
+            if (!splashPotion) return;
+
+            const teammates = await agent.team_manager.getTeammates();
+            for (const team of teammates) {
+                if (team.current_hp / team.max_hp < 0.7) {
+                    const teammateEntity = Object.values(agent.bot.entities).find(e => e.username === team.name);
+                    if (teammateEntity && teammateEntity.position.distanceTo(agent.bot.entity.position) < 8) {
+                        say(agent, `Healing teammate ${team.name}!`);
+                        execute(this, agent, async () => {
+                            await agent.bot.equip(splashPotion, 'hand');
+                            await agent.bot.lookAt(teammateEntity.position);
+                            await agent.bot.activateItem();
+                            say(agent, `Healed ${team.name}.`);
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+    },
+    {
+        name: 'logistics_delivery',
+        description: 'Support bot fetches and delivers items to teammates in need.',
+        interrupts: ['action:followPlayer', 'item_collecting', 'hunting'],
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const requests = Array.from(agent.team_manager.activeSupplyRequests.values());
+            if (requests.length === 0) return;
+
+            for (const req of requests) {
+                if (req.botId === agent.bot_id) continue;
+                
+                const inventory = agent.bot.inventory.items();
+                const item = inventory.find(i => i.name.includes(req.itemName));
+                
+                if (item && item.count > 1) { // Only deliver if we have spares
+                    say(agent, `Delivering ${req.itemName} to ${req.botName}!`);
+                    execute(this, agent, async () => {
+                        await skills.goToPosition(agent.bot, req.pos.x, req.pos.y, req.pos.z, 2);
+                        await agent.bot.tossStack(item);
+                        agent.team_manager.activeSupplyRequests.delete(req.botId);
+                    });
+                    return;
+                }
+            }
+        }
+    },
+    {
+        name: 'bait_and_switch',
+        description: 'One bot lures the target while others wait in ambush.',
+        interrupts: ['all'],
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const targetName = agent.team_manager.activeBaitTarget;
+            if (!targetName) return;
+
+            const depot = agent.team_manager.depotLocation;
+            if (!depot) return; // Need a point to lure them to
+
+            const isLeader = await agent.team_manager.isLeader();
+            const target = world.getNearestEntityWhere(agent.bot, e => e.name === targetName || e.username === targetName, 48);
+
+            if (isLeader) {
+                // The Bait: Get close, then run to Depot
+                if (target) {
+                    const dist = agent.bot.entity.position.distanceTo(target.position);
+                    if (dist < 10) {
+                        say(agent, `Baiting ${targetName} towards the ambush!`);
+                        execute(this, agent, async () => {
+                            await skills.goToPosition(agent.bot, depot.x, depot.y, depot.z, 2);
+                        });
+                    } else {
+                        await skills.goToPosition(agent.bot, target.position.x, target.position.y, target.position.z, 8);
+                    }
+                }
+            } else {
+                // The Ambushers: Hide near Depot
+                const distToDepot = agent.bot.entity.position.distanceTo(new Vec3(depot.x, depot.y, depot.z));
+                if (distToDepot > 5) {
+                    execute(this, agent, async () => {
+                        await skills.goToPosition(agent.bot, depot.x + 2, depot.y, depot.z + 2, 2);
+                        agent.bot.setControlState('sneak', true);
+                    });
+                }
             }
         }
     },
@@ -252,6 +376,39 @@ const modes_list = [
                     if (player.position.distanceTo(agent.bot.entity.position) < this.distance) {
                         await skills.moveAwayFromEntity(agent.bot, player, this.distance);
                     }
+                });
+            }
+        }
+    },
+    {
+        name: 'follow_formation',
+        description: 'Maintain a tactical formation around the leader. Non-leaders only.',
+        interrupts: ['item_collecting', 'hunting', 'torch_placing'],
+        on: true,
+        active: false,
+        update: async function (agent) {
+            const isLeader = await agent.team_manager.isLeader();
+            if (isLeader) return;
+
+            const leader = await agent.team_manager.getLeader();
+            if (!leader) return;
+
+            // Find leader entity
+            const leaderEntity = Object.values(agent.bot.entities).find(e => e.username === leader.name);
+            if (!leaderEntity) return;
+
+            const index = await agent.team_manager.getSquadIndex();
+            const targetPos = combat.getFormationPosition(
+                leaderEntity.position, 
+                leaderEntity.yaw, 
+                index, 
+                6 // Max formation size
+            );
+
+            const dist = agent.bot.entity.position.distanceTo(targetPos);
+            if (dist > 1.5) {
+                execute(this, agent, async () => {
+                    await skills.goToPosition(agent.bot, targetPos.x, targetPos.y, targetPos.z, 1);
                 });
             }
         }
