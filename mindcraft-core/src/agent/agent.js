@@ -50,6 +50,16 @@ export class Agent {
         this.memory_bank = new MemoryBank(this);
         await this.memory_bank.sync();
         this.self_prompter = new SelfPrompter(this);
+        
+        // Multi-Agent Coordination
+        const { TeamManager } = await import('./team_manager.js');
+        this.team_manager = new TeamManager(this);
+
+        // Security & Discovery
+        const { SecurityManager } = await import('./security_manager.js');
+        this.security_manager = new SecurityManager(this);
+        await this.security_manager.initKeys();
+        
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
@@ -127,7 +137,11 @@ export class Agent {
               
                 this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
+                this.startReflectionTimer();
               
+                // Robust Team Session Initialization
+                await this.team_manager.initSession();
+
                 if (!load_mem) {
                     if (settings.task) {
                         this.task.initBotTask();
@@ -148,6 +162,49 @@ export class Agent {
                 process.exit(0);
             }
         });
+    }
+
+    startReflectionTimer() {
+        const REFLECTION_INTERVAL = 10 * 60 * 1000; // 10 minutes
+        setInterval(async () => {
+            if (this.history.turns.length > 5) { // Only reflect if there's significant activity
+                try {
+                    await this.performReflection();
+                } catch (err) {
+                    console.error("Autonomous reflection failed:", err);
+                }
+            }
+        }, REFLECTION_INTERVAL);
+    }
+
+    async performFailureReflection(reason) {
+        console.log(`${this.name} is reflecting on failure: ${reason}`);
+        const turns = this.history.getHistory();
+        
+        try {
+            // 1. Get Failure Analysis from LLM
+            const lesson = await this.prompter.promptFailureAnalysis(turns, reason);
+            console.log(`${this.name} Lesson Learned: ${lesson}`);
+
+            // 2. Store as High-Importance Abstract Memory
+            await this.history.summarizeMemories(
+                turns, 
+                'abstract', 
+                null, 
+                0.9, // High importance
+                { 
+                    status: 'failure', 
+                    original_reason: reason,
+                    directContent: `[LESSON LEARNED] ${lesson} (Context: ${reason})`
+                }
+            );
+
+            // 3. Inform the bot of its own lesson
+            this.handleMessage('system', `Self-Reflection complete. New survival rule established: "${lesson}". I will prioritize this in future decisions.`);
+            
+        } catch (err) {
+            console.error(`${this.name} failure reflection failed:`, err);
+        }
     }
 
     async _setupEventHandlers(save_data, init_message) {
@@ -278,6 +335,56 @@ export class Agent {
         if (!self_prompt && !from_other_bot) { // from user, check for forced commands
             const user_command_name = containsCommand(message);
             if (user_command_name) {
+                // Handling Authentication Token
+                if (user_command_name === '!auth') {
+                    const token = message.split(' ')[1];
+                    const senderUuid = this.bot.players[source]?.uuid;
+                    const success = await this.security_manager.authenticateAdmin(token, source, senderUuid);
+                    if (success) {
+                        this.routeResponse(source, `Authentication successful. You are now authorized.`);
+                    } else {
+                        this.routeResponse(source, `Authentication failed. Invalid or expired token.`);
+                    }
+                    return true;
+                }
+
+                // Check for authorization for other commands
+                const senderUuid = this.bot.players[source]?.uuid;
+                if (!this.security_manager.isAuthorized(senderUuid)) {
+                    this.routeResponse(source, `Unauthorized. Please use !auth <token> to gain access.`);
+                    return false;
+                }
+
+                // Handling Squad Focus Command
+                if (user_command_name === '!focus') {
+                    const targetName = message.split(' ')[1];
+                    if (!targetName) return false;
+                    const entity = world.getNearestEntityWhere(this.bot, e => e.name === targetName || e.username === targetName, 64);
+                    if (entity) {
+                        await this.team_manager.broadcastFocusTarget(entity.id.toString(), targetName);
+                        this.routeResponse(source, `Squad focus set to ${targetName}. All bots engaging.`);
+                    } else {
+                        this.routeResponse(source, `Target ${targetName} not found nearby.`);
+                    }
+                    return true;
+                }
+
+                // Handling Set Depot Command
+                if (user_command_name === '!setDepot') {
+                    await this.team_manager.setDepot(this.bot.entity.position);
+                    this.routeResponse(source, `Depot coordinates set to ${this.bot.entity.position.x.toFixed(1)}, ${this.bot.entity.position.y.toFixed(1)}, ${this.bot.entity.position.z.toFixed(1)}.`);
+                    return true;
+                }
+
+                // Handling Tactical Bait Command
+                if (user_command_name === '!bait') {
+                    const targetName = message.split(' ')[1];
+                    if (!targetName) return false;
+                    this.team_manager.activeBaitTarget = targetName;
+                    this.routeResponse(source, `Tactical baiting initiated for ${targetName}. Squad moving to ambush positions.`);
+                    return true;
+                }
+
                 if (!commandExists(user_command_name)) {
                     this.routeResponse(source, `Command '${user_command_name}' does not exist.`);
                     return false;
@@ -323,7 +430,10 @@ export class Agent {
         for (let i=0; i<max_responses; i++) {
             if (checkInterrupt()) break;
             let history = this.history.getHistory();
+            
+            await this.team_manager.setThinking(true);
             let res = await this.prompter.promptConvo(history);
+            await this.team_manager.setThinking(false);
 
             console.log(`${this.name} full response to ${source}: ""${res}""`);
 
@@ -488,13 +598,29 @@ export class Agent {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;
                 }
                 let dimention = this.bot.game.dimension;
+                const death_reason = message;
                 this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
+                
+                // Trigger Failure Reflection
+                setTimeout(() => {
+                    this.performFailureReflection(death_reason).catch(console.error);
+                }, 5000); // Wait 5s to respawn and stabilize
             }
         });
-        this.bot.on('idle', () => {
+        this.bot.on('idle', async () => {
             this.bot.clearControlStates();
             this.bot.pathfinder.stop(); // clear any lingering pathfinder
             this.bot.modes.unPauseAll();
+            
+            // Multi-Agent Task Scanning
+            if (this.isIdle()) {
+                const availableTasks = await this.team_manager.syncTeamBoard();
+                if (availableTasks.length > 0) {
+                    // Try to claim the first one
+                    await this.team_manager.claimTask(availableTasks[0].id);
+                }
+            }
+
             setTimeout(() => {
                 if (this.isIdle()) {
                     this.actions.resumeAction();
@@ -505,6 +631,27 @@ export class Agent {
         // Init NPC controller
         this.npc.init();
 
+        this.bot.once('spawn', async () => {
+            console.log(`[Security] ${this.name} spawned. Initializing identity...`);
+            await this.security_manager.registerIdentity();
+        });
+
+        // Periodic Teammate Discovery & RSA Verification
+        setInterval(async () => {
+            const players = Object.values(this.bot.players);
+            for (const p of players) {
+                if (p.username === this.name) continue;
+                // Check if we already know this person is a teammate
+                if (!this.security_manager.verifiedTeammates.has(p.uuid)) {
+                    // Start stealth handshake
+                    const success = await this.security_manager.initiateHandshake(p.uuid);
+                    if (success) {
+                        console.log(`[Security] ${this.name} verified teammate: ${p.username}`);
+                    }
+                }
+            }
+        }, 30000); // Every 30s
+
         // This update loop ensures that each update() is called one at a time, even if it takes longer than the interval
         const INTERVAL = 300;
         let last = Date.now();
@@ -512,6 +659,8 @@ export class Agent {
             while (true) {
                 let start = Date.now();
                 await this.update(start - last);
+                await this.team_manager.updateStatus(); // Sync HP/Role every cycle
+                if (Math.random() < 0.05) await this.team_manager.checkSupplies(); // Probabilistic supply check (~every 10s)
                 let remaining = INTERVAL - (Date.now() - start);
                 if (remaining > 0) {
                     await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -538,6 +687,7 @@ export class Agent {
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();
+        if (this.team_manager) this.team_manager.stopHeartbeat();
         process.exit(code);
     }
     async checkTaskDone() {
