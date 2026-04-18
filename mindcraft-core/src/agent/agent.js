@@ -1,6 +1,6 @@
 import { History } from './history.js';
 import { Coder } from './coder.js';
-import { VisionInterpreter } from './vision/vision_interpreter.js';
+// import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { TacticalTiers, Importance, EventTypes } from '../utils/tactical_events.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
@@ -153,9 +153,9 @@ export class Agent {
                     { message: "Bot spawned and system online." }
                 );
 
-                addBrowserViewer(this.bot, count_id);
-                console.log('Initializing vision intepreter...');
-                this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+                // addBrowserViewer(this.bot, count_id);
+                // console.log('Initializing vision intepreter...');
+                // this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
 
                 // wait for a bit so stats are not undefined
                 await new Promise((resolve) => setTimeout(resolve, 1000));

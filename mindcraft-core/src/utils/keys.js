@@ -20,7 +20,7 @@ export async function initKeys(user_id = null, customKeys = null) {
     const envVars = [
         'OPENAI_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 
         'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY',
-        'MISTRAL_API_KEY', 'OPENROUTER_API_KEY'
+        'GROQCLOUD_API_KEY', 'MISTRAL_API_KEY', 'OPENROUTER_API_KEY'
     ];
 
     for (const name of envVars) {

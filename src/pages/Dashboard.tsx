@@ -46,7 +46,8 @@ export default function Dashboard() {
         host: serverIp,
         port: parseInt(serverPort),
         auth: "offline",
-        profile: profile, // This will be used to load the local JSON
+        profile: profile, // This is the path
+        name: username,   // Pass the name explicitly
         init_message: "Hello, I am ready to help!",
       });
 

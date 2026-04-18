@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useBotControl } from "@/hooks/useBotControl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,7 @@ export default function BotEdit() {
   const isNew = !id || id === "new";
   const nav = useNavigate();
   const { user } = useAuth();
+  const { launchBot, isConnected } = useBotControl();
   const [form, setForm] = useState<FormState>(empty);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
@@ -94,12 +96,36 @@ export default function BotEdit() {
     if (!user) return;
     setBusy(true);
     const payload = { ...form, user_id: user.id };
-    const res = isNew
+    
+    const res: any = isNew
       ? await supabase.from("bots").insert(payload as any).select().single()
       : await supabase.from("bots").update(payload as any).eq("id", id!).select().single();
+    
+    if (res.error) {
+      toast.error(res.error.message);
+      setBusy(false);
+      return;
+    }
+
+    const botId = res.data.id;
+    toast.success(isNew ? "Bot created in database" : "Settings saved");
+
+    // Launch the bot via Mindserver
+    if (isConnected) {
+      toast.info(`Triggering spawn for ${form.name}...`);
+      const launchRes: any = await launchBot(botId);
+      if (launchRes.success) {
+        toast.success(`${form.name} is joining Minecraft!`);
+        nav("/bots");
+      } else {
+        toast.error(`Database saved, but launch failed: ${launchRes.error}`);
+      }
+    } else {
+      toast.warning("Bot saved to DB, but MindServer is offline. Start it manually.");
+      nav("/bots");
+    }
+
     setBusy(false);
-    if (res.error) toast.error(res.error.message);
-    else { toast.success(isNew ? "Bot created" : "Saved"); nav("/bots"); }
   }
 
   if (loading) return <div className="p-6 text-muted-foreground">Loading…</div>;

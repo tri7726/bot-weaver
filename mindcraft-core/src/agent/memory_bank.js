@@ -9,13 +9,17 @@ export class MemoryBank {
 
 	async sync() {
 		try {
+			if (!this.serverIp) return;
 			const { data, error } = await supabase
 				.from('agent_memories')
 				.select('content, metadata')
-				.eq('server_ip', this.serverIp) // Pull all squad memories
+				.eq('server_ip', this.serverIp)
 				.eq('metadata->type', 'location');
 			
-			if (error) throw error;
+			if (error) {
+				console.warn('Memory sync warning (column may not exist yet):', error.message);
+				return;
+			}
 			
 			if (data) {
 				data.forEach(item => {
@@ -38,7 +42,7 @@ export class MemoryBank {
 					server_ip: this.serverIp,
 					content: name,
 					metadata: { type: 'location', coords: [x, y, z] }
-				}, { onConflict: 'server_ip, content' }); // Squad-wide uniqueness
+				}, { onConflict: 'server_ip, content' });
 			
 			if (error) throw error;
 		} catch (err) {

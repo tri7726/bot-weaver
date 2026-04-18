@@ -1,0 +1,17 @@
+{
+  "memory": "",
+  "turns": [
+    {
+      "role": "system",
+      "content": "Respond with hello world and your name"
+    },
+    {
+      "role": "system",
+      "content": "Agent process restarted."
+    }
+  ],
+  "self_prompting_state": 0,
+  "self_prompt": null,
+  "taskStart": 1776478808924,
+  "last_sender": null
+}

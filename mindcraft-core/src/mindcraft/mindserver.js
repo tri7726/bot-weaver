@@ -76,27 +76,44 @@ export function createMindServer(host_public = false, port = 8080) {
         agentsStatusUpdate(socket);
 
         socket.on('create-agent', async (settings, callback) => {
-            console.log('API create agent...');
-            for (let key in settings_spec) {
-                if (!(key in settings)) {
-                    if (settings_spec[key].required) {
-                        callback({ success: false, error: `Setting ${key} is required` });
-                        return;
-                    }
-                    else {
-                        settings[key] = settings_spec[key].default;
-                    }
+            // If profile is a string (path), load it
+            if (typeof settings.profile === 'string') {
+                try {
+                    const profilePath = path.join(process.cwd(), settings.profile);
+                    const profileData = JSON.parse(readFileSync(profilePath, 'utf8'));
+                    settings.profile = profileData;
+                } catch (err) {
+                    callback({ success: false, error: `Failed to load profile: ${err.message}` });
+                    return;
                 }
             }
-            for (let key in settings) {
-                if (!(key in settings_spec)) {
-                    delete settings[key];
-                }
+
+            // Prioritize the name passed from the UI
+            if (settings.name) {
+                if (!settings.profile) settings.profile = {};
+                settings.profile.name = settings.name;
             }
+
             if (settings.profile?.name) {
                 if (settings.profile.name in agent_connections) {
                     callback({ success: false, error: 'Agent already exists' });
                     return;
+                }
+                for (let key in settings_spec) {
+                    if (!(key in settings)) {
+                        if (settings_spec[key].required) {
+                            callback({ success: false, error: `Setting ${key} is required` });
+                            return;
+                        }
+                        else {
+                            settings[key] = settings_spec[key].default;
+                        }
+                    }
+                }
+                for (let key in settings) {
+                    if (!(key in settings_spec)) {
+                        delete settings[key];
+                    }
                 }
                 let returned = await mindcraft.createAgent(settings);
                 callback({ success: returned.success, error: returned.error });
@@ -116,10 +133,22 @@ export function createMindServer(host_public = false, port = 8080) {
         socket.on('launch-bot', async (botId, callback) => {
             try {
                 const { supabase } = await import('../utils/supabase.js');
+                console.log(`[LaunchGuard] Received launch request for botId: "${botId}"`);
                 
                 // 1. Fetch Bot Config
                 const { data: bot, error: botErr } = await supabase.from('bots').select('*').eq('id', botId).maybeSingle();
-                if (botErr || !bot) throw new Error(botErr?.message || 'Bot not found');
+                
+                if (botErr) {
+                    console.error(`[LaunchGuard] Supabase Error:`, botErr.message);
+                    throw new Error(`Database Error: ${botErr.message}`);
+                }
+                
+                if (!bot) {
+                    console.error(`[LaunchGuard] Bot not found for ID: ${botId}. Make sure the bot exists in Supabase.`);
+                    throw new Error(`Bot not found in database (ID: ${botId}).`);
+                }
+
+                console.log(`[LaunchGuard] Found bot: "${bot.name}". Preparing to start...`);
 
                 // 2. Fetch Profile if exists
                 let system_prompt = bot.system_prompt;
@@ -216,25 +245,39 @@ export function createMindServer(host_public = false, port = 8080) {
         });
 
         socket.on('chat-message', (agentName, json) => {
-            if (!agent_connections[agentName]) {
-                console.warn(`Agent ${agentName} tried to send a message but is not logged in`);
+            const agent = agent_connections[agentName];
+            if (!agent) {
+                console.warn(`Agent ${agentName} tried to receive a message but is not logged in`);
+                return;
+            }
+            if (!agent.socket) {
+                console.warn(`Agent ${agentName} exists but has no active socket connection`);
                 return;
             }
             console.log(`${curAgentName} sending message to ${agentName}: ${json.message}`);
-            agent_connections[agentName].socket.emit('chat-message', curAgentName, json);
+            agent.socket.emit('chat-message', curAgentName, json);
         });
 
         socket.on('set-agent-settings', (agentName, settings) => {
             const agent = agent_connections[agentName];
             if (agent) {
                 agent.setSettings(settings);
-                agent.socket.emit('restart-agent');
+                if (agent.socket) {
+                    agent.socket.emit('restart-agent');
+                } else {
+                    console.warn(`Settings updated for ${agentName}, but agent socket is not connected for restart.`);
+                }
             }
         });
 
         socket.on('restart-agent', (agentName) => {
             console.log(`Restarting agent: ${agentName}`);
-            agent_connections[agentName].socket.emit('restart-agent');
+            const agent = agent_connections[agentName];
+            if (agent && agent.socket) {
+                agent.socket.emit('restart-agent');
+            } else {
+                console.warn(`Cannot restart ${agentName}: socket not connected`);
+            }
         });
 
         socket.on('stop-agent', (agentName) => {

@@ -38,7 +38,7 @@ export async function createAgent(settings) {
     settings = JSON.parse(JSON.stringify(settings));
     let agent_name = settings.profile.name;
     const agentIndex = agent_count++;
-    const viewer_port = 3000 + agentIndex;
+    const viewer_port = 4000 + agentIndex;
     registerAgent(settings, viewer_port);
     let load_memory = settings.load_memory || false;
     let init_message = settings.init_message || null;
