@@ -21,11 +21,33 @@ export const useBotControl = () => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:8080');
+    const newSocket = io('http://localhost:8089');
     setSocket(newSocket);
 
     newSocket.on('connect', () => setIsConnected(true));
     newSocket.on('disconnect', () => setIsConnected(false));
+
+    newSocket.on('log', (data) => {
+      setLogs((prev) => [...prev.slice(-99), data]);
+    });
+
+    newSocket.on('tactical_packet', (packet) => {
+      // Show alerts for all agents in the global squad log
+      if (packet.importance === 'critical' || packet.importance === 'high' || packet.data.targetBotId === 'all') {
+        if (packet.tier === 'TELEMETRY' && packet.type === 'heartbeat') {
+           // We could update a dedicated 'status' state here
+           // For now, let's treat critical heartbeats or alerts as logs
+        }
+        
+        if (packet.importance === 'critical' || packet.importance === 'high') {
+           setLogs((prev) => [...prev.slice(-99), {
+             agent: packet.sender.name,
+             message: `[${packet.type.toUpperCase()}] ${packet.data.message || 'Alert!'}`,
+             timestamp: packet.timestamp
+           }]);
+        }
+      }
+    });
 
     newSocket.on('agents-status', (status: AgentStatus[]) => {
       setAgents(status);

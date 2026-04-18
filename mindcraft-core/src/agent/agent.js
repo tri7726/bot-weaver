@@ -1,6 +1,7 @@
 import { History } from './history.js';
 import { Coder } from './coder.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
+import { TacticalTiers, Importance, EventTypes } from '../utils/tactical_events.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
@@ -101,6 +102,7 @@ export class Agent {
                  onDisconnect('Error', err);
             } else {
                  log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);
+                 this.team_manager.broadcastLog(`Connection Error: ${String(err)}`, 'error');
             }
         });
 
@@ -111,10 +113,26 @@ export class Agent {
             serverProxy.login();
             
             // Set skin for profile, requires Fabric Tailor. (https://modrinth.com/mod/fabrictailor)
-            if (this.prompter.profile.skin)
+            if (this.prompter.profile.skin) {
                 this.bot.chat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
-            else
+            } else {
                 this.bot.chat(`/skin clear`);
+            }
+
+            // Live Console Hooks
+            this.bot.on('chat', (username, message) => {
+                if (username === this.bot.username) return;
+                this.team_manager.broadcastLog(`${username}: ${message}`, 'chat');
+            });
+
+            const self = this;
+            const originalSay = this.bot.chat;
+            this.bot.chat = (msg) => {
+                self.team_manager.broadcastLog(`Bot: ${msg}`, 'bot_chat');
+                originalSay.call(self.bot, msg);
+            };
+            
+            this.team_manager.broadcastLog("System: Bot connected and console active.", "system");
         });
 		const spawnTimeoutDuration = settings.spawn_timeout;
         const spawnTimeout = setTimeout(() => {
@@ -125,6 +143,16 @@ export class Agent {
         this.bot.once('spawn', async () => {
             try {
                 clearTimeout(spawnTimeout);
+                this.team_manager.startSystemHeartbeat();
+                this.team_manager.startSupplyCheck();
+                
+                await this.team_manager.broadcastTacticalEvent(
+                    TacticalTiers.LIFECYCLE,
+                    EventTypes.BOT_SPAWNED,
+                    Importance.MEDIUM,
+                    { message: "Bot spawned and system online." }
+                );
+
                 addBrowserViewer(this.bot, count_id);
                 console.log('Initializing vision intepreter...');
                 this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
@@ -157,10 +185,37 @@ export class Agent {
                 await new Promise((resolve) => setTimeout(resolve, 10000));
                 this.checkAllPlayersPresent();
 
+                // Intelligence: Hook into damage
+                this.bot.on('health', () => {
+                    if (this.prev_hp === undefined) {
+                        this.prev_hp = this.bot.health;
+                        return;
+                    }
+                    if (this.bot.health < this.prev_hp) {
+                        const damage = this.prev_hp - this.bot.health;
+                        this.team_manager.broadcastTacticalEvent(
+                            TacticalTiers.INTELLIGENCE,
+                            EventTypes.UNDER_ATTACK,
+                            this.bot.health < 5 ? Importance.CRITICAL : Importance.HIGH,
+                            { damage, current_hp: this.bot.health }
+                        );
+                    }
+                    this.prev_hp = this.bot.health;
+                });
+
             } catch (error) {
                 console.error('Error in spawn event:', error);
                 process.exit(0);
             }
+        });
+
+        this.bot.on('death', () => {
+            this.team_manager.broadcastTacticalEvent(
+                TacticalTiers.LIFECYCLE,
+                EventTypes.BOT_DIED,
+                Importance.CRITICAL,
+                { message: "Bot died in combat." }
+            );
         });
     }
 

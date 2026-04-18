@@ -1,5 +1,9 @@
 import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { logoutAgent } from '../mindcraft/mindserver.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class AgentProcess {
     constructor(name, port) {
@@ -11,7 +15,8 @@ export class AgentProcess {
         this.count_id = count_id;
         this.running = true;
 
-        let args = ['src/process/init_agent.js', this.name];
+        let initPath = path.resolve(__dirname, 'init_agent.js');
+        let args = [initPath, this.name];
         args.push('-n', this.name);
         args.push('-c', count_id);
         if (load_memory)

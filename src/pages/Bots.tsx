@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Play, Square, Pencil, Trash2, Bot as BotIcon, Activity, Shield, Copy, Key } from "lucide-react";
+import { Plus, Play, Square, Pencil, Trash2, Bot as BotIcon, Activity, Shield, Copy, Key, Terminal as TerminalIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { Console } from "@/components/Console";
 
 type Bot = {
   id: string; name: string; minecraft_username: string; host: string; port: number;
@@ -195,6 +196,17 @@ export default function Bots() {
                                     </p>
                                 </div>
                             </div>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10" disabled={!isRunning}>
+                                <TerminalIcon className="h-4 w-4" />
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl p-0 border-none bg-transparent">
+                            <Console botId={b.id} botName={b.name} serverIp={b.host} />
                         </DialogContent>
                     </Dialog>
 

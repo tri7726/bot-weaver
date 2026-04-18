@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabase.js';
 import { executeCommand } from './commands/index.js';
 import { isBetterOrEqual } from '../utils/tool_tiers.js';
+import { TacticalTiers, Importance, EventTypes } from '../utils/tactical_events.js';
 
 export class TeamManager {
     constructor(agent) {
@@ -8,6 +9,7 @@ export class TeamManager {
         this.currentTaskId = null;
         this.currentAdminUuid = null; // Track who authorized this task
         this.heartbeatInterval = null;
+        this.systemHeartbeatInterval = null;
         this.serverIp = (agent.bot?.proxy?.host || 'localhost') + ':' + (agent.bot?.proxy?.port || '25565');
         
         this.janitorInterval = setInterval(() => this.runMaintenance(), 60000);
@@ -31,18 +33,51 @@ export class TeamManager {
                 table: 'squad_intel',
                 filter: `server_ip=eq.${this.serverIp}`
             }, (payload) => {
-                if (payload.new.type === 'focus_target') {
-                    console.log(`[Team] Realtime focus received: ${payload.new.data.entityName}`);
-                    this.activeFocusTarget = payload.new.data;
-                } else if (payload.new.type === 'supply_request') {
-                    console.log(`[Team] Realtime supply request: ${payload.new.data.itemName}`);
-                    this.activeSupplyRequests.set(payload.new.data.botId, payload.new.data);
-                } else if (payload.new.type === 'depot_set') {
-                    console.log(`[Team] Depot updated:`, payload.new.data);
-                    this.depotLocation = payload.new.data;
-                }
+                this.handleIntelUpdate(payload.new);
+            })
+            .on('broadcast', { event: 'tactical_packet' }, (event) => {
+                this.handleTacticalPacket(event.payload);
             })
             .subscribe();
+    }
+
+    handleIntelUpdate(intel) {
+        if (intel.type === 'focus_target') {
+            console.log(`[Team] DB focus received: ${intel.data.entityName}`);
+            this.activeFocusTarget = intel.data;
+        } else if (intel.type === 'supply_request') {
+            this.activeSupplyRequests.set(intel.data.botId, intel.data);
+        } else if (intel.type === 'depot_set') {
+            this.depotLocation = intel.data;
+        } else if (intel.type === 'web_command') {
+            if (intel.data.botId === this.agent.bot_id) {
+                console.log(`[Team] DB remote command: ${intel.data.command}`);
+                this.agent.handleMessage('Admin', intel.data.command);
+            }
+        }
+    }
+
+    handleTacticalPacket(packet) {
+        // Intelligence: Handle resource requests from teammates
+        if (packet.tier === TacticalTiers.INTELLIGENCE && packet.type === EventTypes.RESOURCE_REQUEST) {
+            this.considerResourceAid(packet);
+        }
+
+        // Coordination: Handle offers of help
+        if (packet.tier === TacticalTiers.INTELLIGENCE && packet.type === EventTypes.RESOURCE_OFFER) {
+            if (packet.data.targetBotId === this.agent.bot_id) {
+                console.log(`[Team] Aid is coming from ${packet.sender.name}!`);
+                this.broadcastLog(`Received help offer from ${packet.sender.name} for ${packet.data.itemName}.`, 'success');
+            }
+        }
+
+        // Only process commands intended for this bot or the whole squad
+        if (packet.tier === TacticalTiers.COMMAND) {
+            if (packet.data.targetBotId === 'all' || packet.data.targetBotId === this.agent.bot_id) {
+                console.log(`[Team] Tactical command received: ${packet.data.command}`);
+                this.agent.handleMessage(packet.sender.name, packet.data.command);
+            }
+        }
     }
 
     async verifyOwnership() {
@@ -118,10 +153,44 @@ export class TeamManager {
         }, 30000);
     }
 
+    async stopSupplyCheck() {
+        if (this.supplyCheckInterval) clearInterval(this.supplyCheckInterval);
+    }
+
+    startSupplyCheck() {
+        if (this.supplyCheckInterval) clearInterval(this.supplyCheckInterval);
+        this.supplyCheckInterval = setInterval(async () => {
+            await this.checkSupplies();
+        }, 60000); // Check every 60s
+    }
+
     stopHeartbeat() {
         if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
         this.currentTaskId = null;
         this.currentAdminUuid = null;
+    }
+
+    startSystemHeartbeat() {
+        if (this.systemHeartbeatInterval) clearInterval(this.systemHeartbeatInterval);
+        console.log(`[Team] Starting System Heartbeat (Telemetry Uplink)...`);
+        
+        this.systemHeartbeatInterval = setInterval(async () => {
+            const bot = this.agent.bot;
+            if (!bot || !bot.entity) return;
+
+            await this.broadcastTacticalEvent(
+                TacticalTiers.TELEMETRY,
+                EventTypes.HEARTBEAT,
+                Importance.LOW,
+                {
+                    hp: bot.health,
+                    food: bot.food,
+                    pos: bot.entity.position,
+                    oxygen: bot.oxygenLevel,
+                    isThinking: !!this.currentTaskId
+                }
+            );
+        }, 5000); // 5s Lifecycle heartbeat
     }
 
     async setThinking(isThinking) {
@@ -245,6 +314,7 @@ export class TeamManager {
     }
 
     async broadcastSupplyRequest(itemName, quantity) {
+        // 1. Log to DB for persistence
         await supabase.from('squad_intel').insert({
             server_ip: this.serverIp,
             type: 'supply_request',
@@ -256,6 +326,43 @@ export class TeamManager {
                 pos: this.agent.bot.entity.position
             }
         });
+
+        // 2. Broadcast for Realtime Response
+        await this.broadcastTacticalEvent(
+            TacticalTiers.INTELLIGENCE,
+            EventTypes.RESOURCE_REQUEST,
+            Importance.HIGH,
+            { itemName, quantity, pos: this.agent.bot.entity.position }
+        );
+    }
+
+    async considerResourceAid(request) {
+        if (request.sender.id === this.agent.bot_id) return;
+
+        const inventory = this.agent.bot.inventory.items();
+        const item = inventory.find(i => i.name.includes(request.data.itemName));
+
+        // Policy: Only help if we have > 16 of the item or it's a surplus weapon
+        const surplusThreshold = request.data.itemName.includes('cooked') ? 16 : 1;
+        
+        if (item && item.count > surplusThreshold) {
+            console.log(`[Team] I have surplus ${request.data.itemName}! Offering to ${request.sender.name}.`);
+            
+            await this.broadcastTacticalEvent(
+                TacticalTiers.INTELLIGENCE,
+                EventTypes.RESOURCE_OFFER,
+                Importance.MEDIUM,
+                { 
+                    targetBotId: request.sender.id,
+                    itemName: request.data.itemName,
+                    quantity: Math.min(item.count - surplusThreshold, request.data.quantity)
+                }
+            );
+
+            // Trigger actual delivery action
+            const quantityToGive = Math.min(item.count - surplusThreshold, request.data.quantity);
+            await executeCommand(this.agent, `!goal("Meet ${request.sender.name} at ${Math.round(request.data.pos.x)}, ${Math.round(request.data.pos.y)}, ${Math.round(request.data.pos.z)} and give ${quantityToGive} ${request.data.itemName}")`);
+        }
     }
 
     async checkSupplies() {
@@ -275,5 +382,41 @@ export class TeamManager {
                 await this.broadcastSupplyRequest(item, count - has);
             }
         }
+    }
+
+    async broadcastLog(message, level = 'info') {
+        if (!this.squadChannel) return;
+        
+        await this.squadChannel.send({
+            type: 'broadcast',
+            event: 'log',
+            payload: {
+                botId: this.agent.bot_id,
+                botName: this.agent.name,
+                message,
+                level,
+                timestamp: new Date().toISOString()
+            }
+        });
+    }
+
+    async broadcastTacticalEvent(tier, eventType, importance, payload) {
+        if (!this.squadChannel) return;
+
+        await this.squadChannel.send({
+            type: 'broadcast',
+            event: 'tactical_packet',
+            payload: {
+                tier,
+                type: eventType,
+                importance,
+                sender: {
+                    id: this.agent.bot_id,
+                    name: this.agent.name
+                },
+                data: payload,
+                timestamp: new Date().toISOString()
+            }
+        });
     }
 }
