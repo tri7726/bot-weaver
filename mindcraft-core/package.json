@@ -39,6 +39,9 @@
     "scripts": {
         "postinstall": "patch-package",
         "start": "node main.js",
+        "test": "node --test src/stability/tests/**/*.test.js",
+        "test:stability": "node --test src/stability/tests/**/*.test.js",
+        "test:watch": "node --test --watch src/stability/tests/**/*.test.js",
         "reinstall": "npm run clean:modules && npm install",
         "clean:modules": "node -e \"const fs=require('fs');const p=require('path');['node_modules','package-lock.json'].forEach(f=>{if(fs.existsSync(f)){if(fs.lstatSync(f).isDirectory()){fs.rmSync(f,{recursive:true,force:true});}else{fs.unlinkSync(f);}}});\""
     },
@@ -46,6 +49,7 @@
         "@eslint/js": "^9.13.0",
         "eslint": "^9.13.0",
         "eslint-plugin-no-floating-promise": "^2.0.0",
+        "fast-check": "^3.15.0",
         "globals": "^15.11.0",
         "patch-package": "^8.0.0"
     }

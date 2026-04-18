@@ -6,7 +6,14 @@ import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Load environment variables from both root and mindcraft-core directories
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(import.meta.dirname, '.env') });
+
+console.log('Environment check:');
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'Set' : 'Not set');
+console.log('VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'Set' : 'Not set');
+console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'Set' : 'Not set');
 
 function parseArguments() {
     return yargs(hideBin(process.argv))

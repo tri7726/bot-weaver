@@ -1,7 +1,7 @@
  const settings = {
-    "minecraft_version": "auto", // or specific version like "1.21.6"
-    "host": "localhost", // or "localhost", "your.ip.address.here"
-    "port": 62015, // set to -1 to automatically scan for open ports
+    "minecraft_version": "1.20.1", // Match Aternos server version
+    "host": "trii77-OOav.aternos.me", // Aternos server
+    "port": 51690, // Aternos server port
     "auth": "offline", // or "microsoft"
 
     // the mindserver manages all agents and hosts the UI

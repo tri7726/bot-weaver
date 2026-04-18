@@ -27,6 +27,11 @@ export class Agent {
         this.count_id = count_id;
         this._disconnectHandled = false;
 
+        // Initialize stability system
+        const { StabilitySystem } = await import('../stability/index.js');
+        this.stabilitySystem = new StabilitySystem(this, settings);
+        await this.stabilitySystem.initialize();
+
         // Initialize components
         this.actions = new ActionManager(this);
         this.prompter = new Prompter(this, settings.profile);
@@ -80,18 +85,45 @@ export class Agent {
         blacklistCommands(this.blocked_actions);
 
         console.log(this.name, 'logging into minecraft...');
-        this.bot = initBot(this.name);
         
-        // Connection Handler
-        const onDisconnect = (event, reason) => {
+        // Use enhanced connection manager instead of basic initBot
+        try {
+            this.bot = await this.stabilitySystem.connectionManager.connect(settings.host, settings.port, {
+                username: this.name,
+                auth: settings.auth,
+                version: settings.minecraft_version
+            });
+        } catch (error) {
+            console.error(`Failed to connect to Minecraft server: ${error.message}`);
+            process.exit(1);
+        }
+        
+        // Enhanced Connection Handler with stability system
+        const onDisconnect = async (event, reason) => {
             if (this._disconnectHandled) return;
             this._disconnectHandled = true;
 
-            // Log and Analyze
-            // handleDisconnection handles logging to console and server
-            const { type } = handleDisconnection(this.name, reason);
-     
-            process.exit(1);
+            // Use enhanced error handler
+            const shouldReconnect = await this.stabilitySystem.errorHandler.handleError(reason, {
+                event,
+                agent: this.name,
+                timestamp: Date.now()
+            });
+
+            if (shouldReconnect) {
+                console.log(`${this.name} attempting to reconnect...`);
+                this._disconnectHandled = false;
+                try {
+                    this.bot = await this.stabilitySystem.connectionManager.reconnect();
+                } catch (reconnectError) {
+                    console.error(`Reconnection failed: ${reconnectError.message}`);
+                    process.exit(1);
+                }
+            } else {
+                // Log and Analyze
+                const { type } = handleDisconnection(this.name, reason);
+                process.exit(1);
+            }
         };
         
         // Bind events
